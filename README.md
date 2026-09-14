@@ -4,9 +4,13 @@ An AI-powered content creation and research platform built with Python, Streamli
 
 ## 🚀 Features
 
-- 🤖 AI-powered content generation
-- 🎯 Platform-specific content creation
-- 🎨 Multiple writing tones
+- 🤖 Multi-Model AI Generation (4 Gemini Models: `gemini-3.7-flash`, `gemini-3.5-flash-lite`, `gemini-3.6-flash`, `gemini-3.1-pro`)
+- 🔀 Multi-Model Comparison Studio (generate variations across all 4 models side-by-side)
+- 🛡️ Resilient Model Fallback Cascade (automatically tries alternative models if one is rate-limited or unavailable)
+- 🎬 Instagram Reels & Video Creator Studio (Reels scripts, YouTube Shorts / TikTok scripts, scene-by-scene B-roll & visual hooks)
+- 🎯 Platform-specific content creation (LinkedIn Posts, Instagram Captions & Carousels, X / Twitter Threads, Newsletters, Blog Outlines)
+- 💡 Creator-First Format (text blueprints with spoken script, visual cues, on-screen text, audio vibe, and filming inspiration)
+- 🎨 Multiple writing tones (Professional, Casual, Friendly, Formal, Creative, Inspirational)
 - 🎥 Real-time YouTube inspiration search
 - 👤 Discover relevant creators and videos
 - 🧠 AI-generated original content ideas
@@ -16,7 +20,7 @@ An AI-powered content creation and research platform built with Python, Streamli
 
 - Python
 - Streamlit
-- Google Gemini API
+- Google Gemini API (Multi-Model: Gemini 3.7 Flash, 3.5 Flash-Lite, 3.6 Flash, 3.1 Pro)
 - YouTube Data API v3
 - REST APIs
 - python-dotenv
