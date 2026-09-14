@@ -22,26 +22,21 @@ if not YOUTUBE_API_KEY:
 # Gemini client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# 4 Gemini models configured for generation and fallback
-models_to_try = [
-    "gemini-3.7-flash",
-    "gemini-3.5-flash-lite",
+# Automatic model cascade prioritizing the most reliable and capable models
+MODELS_CASCADE = [
     "gemini-3.6-flash",
-    "gemini-3.1-pro"
+    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
 ]
 
-def generate_content_with_gemini(client, user_message, system_prompt=None, preferred_model=None):
+def generate_content(client, user_message, system_prompt=None):
     """
-    Attempts to generate content using the 4 Gemini models.
-    If preferred_model is specified, tries that first, then cascades through the rest.
-    Uses genai.types.GenerateContentConfig with system_instruction.
-    Returns (generated_text, model_used).
+    Automatically generates content using the best working AI model.
+    Cascades silently to backup models if a model experiences temporary spikes or downtime,
+    ensuring zero disruption to the user.
     """
-    candidates = list(models_to_try)
-    if preferred_model and preferred_model in candidates:
-        candidates.remove(preferred_model)
-        candidates.insert(0, preferred_model)
-
     config = None
     if system_prompt:
         config = genai.types.GenerateContentConfig(
@@ -49,20 +44,22 @@ def generate_content_with_gemini(client, user_message, system_prompt=None, prefe
         )
 
     last_error = None
-    for model_name in candidates:
+    for model_name in MODELS_CASCADE:
         try:
             response = client.models.generate_content(
                 model=model_name,
                 contents=user_message,
                 config=config
             )
-            return response.text, model_name
+            if response and response.text:
+                return response.text
         except Exception as e:
-            print(f"Model {model_name} failed or timed out. Trying next... Error: {e}")
+            # Silently log for server debugging and cascade to next model
+            print(f"Model cascade fallback from {model_name}: {e}")
             last_error = e
             continue
 
-    raise Exception(f"All 4 Gemini models failed or timed out. Last error: {last_error}")
+    raise Exception(f"AI service temporarily unavailable. Please try again shortly. (Details: {last_error})")
 
 # Page configuration
 st.set_page_config(
@@ -115,29 +112,6 @@ tone = st.sidebar.selectbox(
 emoji_mode = st.sidebar.checkbox(
     "✨ Include Emojis"
 )
-
-st.sidebar.divider()
-st.sidebar.subheader("🤖 Gemini Models (4)")
-
-model_choice = st.sidebar.selectbox(
-    "Select Model Strategy",
-    ["Auto (Try all 4 models in order)"] + [f"Primary: {m}" for m in models_to_try],
-    help="Choose your preferred model or use Auto to automatically cascade through all 4 models."
-)
-
-compare_mode = st.sidebar.checkbox(
-    "🔀 Multi-Model Mode (Compare all 4 models)",
-    value=False,
-    help="Generate content using all 4 Gemini models side-by-side to compare outputs."
-)
-
-with st.sidebar.expander("ℹ️ 4 Models Configured"):
-    st.markdown("""
-    - **`gemini-3.7-flash`**: High-speed hybrid reasoning
-    - **`gemini-3.5-flash-lite`**: Ultra-fast lightweight model
-    - **`gemini-3.6-flash`**: Versatile & balanced generation
-    - **`gemini-3.1-pro`**: Advanced complex reasoning
-    """)
 
 # ==========================================
 # TABS
@@ -229,70 +203,33 @@ REQUIREMENTS:
 - {emoji_instruction}
 - {additional_instructions}"""
 
-        # Determine preferred model if not Auto
-        preferred_model = None
-        if not model_choice.startswith("Auto"):
-            preferred_model = model_choice.replace("Primary: ", "").strip()
+        with st.spinner("✨ Creating your content..."):
+            try:
+                generated_content = generate_content(
+                    client,
+                    user_message=user_message,
+                    system_prompt=system_prompt,
+                )
 
-        if compare_mode:
-            st.info("Generating content across all 4 Gemini models...")
-            model_tabs = st.tabs([f"🤖 {m}" for m in models_to_try])
+                st.success("✨ Content generated successfully!")
 
-            for idx, m_name in enumerate(models_to_try):
-                with model_tabs[idx]:
-                    with st.spinner(f"Generating with {m_name}..."):
-                        try:
-                            config = genai.types.GenerateContentConfig(
-                                system_instruction=system_prompt,
-                            )
-                            resp = client.models.generate_content(
-                                model=m_name,
-                                contents=user_message,
-                                config=config
-                            )
-                            c_text = resp.text
-                            st.success(f"Generated with **{m_name}**")
-                            st.text_area(
-                                f"Output ({m_name})",
-                                c_text,
-                                height=350,
-                                key=f"tab_content_{m_name}"
-                            )
-                            st.metric("Character Count", len(c_text))
-                        except Exception as err:
-                            st.warning(f"Model `{m_name}` unavailable: {err}")
-        else:
-            with st.spinner("✨ Creating your content..."):
-                try:
-                    generated_content, used_model = generate_content_with_gemini(
-                        client,
-                        user_message=user_message,
-                        system_prompt=system_prompt,
-                        preferred_model=preferred_model
-                    )
+                st.subheader("📄 Generated Content")
 
-                    st.success(f"Content generated successfully using **{used_model}**!")
+                st.text_area(
+                    "Your content",
+                    generated_content,
+                    height=350
+                )
 
-                    if preferred_model and used_model != preferred_model:
-                        st.info(f"ℹ️ Preferred model `{preferred_model}` was unavailable; smoothly fell back to `{used_model}`.")
+                st.metric(
+                    "Character Count",
+                    len(generated_content)
+                )
 
-                    st.subheader("📄 Generated Content")
-
-                    st.text_area(
-                        "Your content",
-                        generated_content,
-                        height=350
-                    )
-
-                    st.metric(
-                        "Character Count",
-                        len(generated_content)
-                    )
-
-                except Exception as e:
-                    st.error(
-                        f"Something went wrong while generating content: {e}"
-                    )
+            except Exception as e:
+                st.error(
+                    f"Something went wrong while generating content: {e}"
+                )
 
 
 # ==========================================
@@ -450,22 +387,16 @@ For each idea provide:
 4. Suggested hook
 5. Short explanation"""
 
-                # Determine preferred model if not Auto
-                target_model = None
-                if not model_choice.startswith("Auto"):
-                    target_model = model_choice.replace("Primary: ", "").strip()
-
                 with st.spinner(
                     "🧠 Generating original content ideas..."
                 ):
-                    idea_text, idea_model = generate_content_with_gemini(
+                    idea_text = generate_content(
                         client,
                         user_message=user_message_ideas,
                         system_prompt=system_prompt_ideas,
-                        preferred_model=target_model
                     )
 
-                    st.caption(f"🤖 Ideas generated using: `{idea_model}`")
+                    st.markdown("### 💡 Strategic Content Ideas")
                     st.write(idea_text)
 
             except requests.exceptions.RequestException as e:
@@ -486,6 +417,6 @@ For each idea provide:
 st.divider()
 
 st.caption(
-    f"✨ AI Career Content Studio | "
-    f"Powered by 4 Gemini Models ({', '.join(models_to_try)}) + YouTube Data API"
+    "✨ AI Career Content Studio | "
+    "Powered by Content Studio AI Engine & YouTube Data API"
 )
